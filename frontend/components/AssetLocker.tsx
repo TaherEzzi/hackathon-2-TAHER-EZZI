@@ -58,7 +58,14 @@ export function AssetLocker() {
     void list();
   }, [list]);
 
-  const addDraftRow = () => setDraft({ ...EMPTY_DRAFT });
+  const addDraftRow = () => {
+    if (draft) {
+      setProblem("A new product is open — save it (✓) or discard (✕) before adding another.");
+      return;
+    }
+    setDraft({ ...EMPTY_DRAFT });
+    setProblem(null);
+  };
 
   const saveDraft = async () => {
     if (!draft) return;
@@ -177,11 +184,23 @@ export function AssetLocker() {
                   <button
                     type="button"
                     onClick={() => draftFileInput.current?.click()}
-                    className="w-14 h-14 border border-dashed border-[#d4af37]/60 flex flex-col items-center justify-center text-[#d4af37] hover:bg-[#d4af37]/10 cursor-pointer transition-colors"
-                    aria-label="Upload product image"
+                    className={`w-14 h-14 flex items-center justify-center overflow-hidden text-[#d4af37] cursor-pointer transition-colors ${
+                      draft.previewUrl
+                        ? "border border-[#d4af37] hover:bg-[#d4af37]/10"
+                        : "border border-dashed border-[#d4af37]/60 hover:bg-[#d4af37]/10"
+                    }`}
+                    aria-label={draft.previewUrl ? "Change product image" : "Upload product image"}
+                    title={draft.previewUrl ? "Click to change the image" : "Click to choose an image"}
                   >
-                    <span className="material-symbols-outlined text-[18px]">upload</span>
-                    <span className="font-code text-[7px] tracking-widest mt-0.5">UPLOAD</span>
+                    {draft.previewUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={draft.previewUrl} alt="Selected product preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="flex flex-col items-center">
+                        <span className="material-symbols-outlined text-[18px]">upload</span>
+                        <span className="font-code text-[7px] tracking-widest mt-0.5">UPLOAD</span>
+                      </span>
+                    )}
                   </button>
                 </td>
                 <td className={td}>
@@ -208,9 +227,11 @@ export function AssetLocker() {
                       disabled={busy}
                       onClick={() => void saveDraft()}
                       className="p-1.5 text-[#d4af37] hover:bg-[#d4af37]/10 cursor-pointer disabled:opacity-40"
-                      aria-label="Save product"
+                      aria-label={busy ? "Saving product" : "Save product"}
                     >
-                      <span className="material-symbols-outlined text-[18px]">check</span>
+                      <span className="material-symbols-outlined text-[18px]">
+                        {busy ? "progress_activity" : "check"}
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -370,7 +391,7 @@ export function AssetLocker() {
         <button
           type="button"
           onClick={addDraftRow}
-          disabled={busy || draft !== null}
+          disabled={busy}
           className="w-full sm:w-auto px-6 py-3 border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0b0b0d] font-code font-bold text-xs tracking-[0.25em] uppercase transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
         >
           <span className="material-symbols-outlined text-[16px] font-bold">add</span>
