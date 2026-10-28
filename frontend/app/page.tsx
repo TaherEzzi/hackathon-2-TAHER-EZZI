@@ -75,6 +75,11 @@ export default function LandingPage() {
 
           {/* Center Monumental Proclamation */}
           <div className="my-auto py-10 lg:py-16 flex flex-col items-center text-center max-w-5xl mx-auto">
+            <img
+              src="/logo-mark.png"
+              alt="BreezePost monogram"
+              className="h-20 sm:h-24 lg:h-28 w-auto mb-8 drop-shadow-[0_0_35px_rgba(212,175,55,0.45)]"
+            />
             <h1 className="text-5xl sm:text-7xl lg:text-[96px] text-white font-[900] tracking-[-0.02em] leading-[0.98] uppercase font-display mb-6">
               YOUR BRAND,{" "}
               <span className="text-[#d4af37] drop-shadow-[0_0_35px_rgba(212,175,55,0.45)]">

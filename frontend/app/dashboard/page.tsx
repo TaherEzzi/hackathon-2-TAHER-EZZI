@@ -40,9 +40,16 @@ function DashNav({ onNavigate }: { onNavigate?: () => void }) {
 /** Brand lockup shared by the desktop rail and the mobile drawer. */
 function DashBrand() {
   return (
-    <span className="font-display font-[900] text-lg tracking-[0.2em] text-white">
-      BREEZEPOST
-    </span>
+    <div className="flex items-center gap-3">
+      <img
+        src="/logo-mark.png"
+        alt="BreezePost monogram"
+        className="h-8 w-auto shrink-0 drop-shadow-[0_0_10px_rgba(212,175,55,0.35)]"
+      />
+      <span className="font-display font-[900] text-lg tracking-[0.2em] text-white">
+        BREEZEPOST
+      </span>
+    </div>
   );
 }
 
@@ -101,9 +108,16 @@ export default function DashboardPage() {
 
   if (loading || !session) {
     return (
-      <main className="flex min-h-screen items-center justify-center font-code text-xs text-[#d4af37] tracking-[0.25em] uppercase">
-        <span className="inline-block w-2.5 h-2.5 bg-[#d4af37] shadow-[0_0_12px_#d4af37] mr-3 animate-ping" />
-        LOADING BENCH...
+      <main className="flex min-h-screen flex-col items-center justify-center gap-6 font-code text-xs text-[#d4af37] tracking-[0.25em] uppercase">
+        <img
+          src="/logo-mark.png"
+          alt="BreezePost"
+          className="h-14 w-auto animate-pulse drop-shadow-[0_0_20px_rgba(212,175,55,0.4)]"
+        />
+        <span className="flex items-center">
+          <span className="inline-block w-2.5 h-2.5 bg-[#d4af37] shadow-[0_0_12px_#d4af37] mr-3 animate-ping" />
+          LOADING BENCH...
+        </span>
       </main>
     );
   }

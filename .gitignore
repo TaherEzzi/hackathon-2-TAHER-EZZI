@@ -32,6 +32,9 @@ presentation.html
 Commercial Product Photography*.zip
 *.backup
 
+# Original logo design file (sized copies live in frontend/public)
+Golden Breezepost Monogram Logo.png
+
 # ── OS / misc ─────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

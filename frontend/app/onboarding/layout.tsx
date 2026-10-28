@@ -32,9 +32,16 @@ export default function OnboardingLayout({ children }: { children: ReactNode }) 
 
   if (auth.loading || !auth.session || !auth.profile) {
     return (
-      <main className="flex min-h-screen items-center justify-center font-code text-xs text-[#d4af37] tracking-[0.25em] uppercase">
-        <span className="inline-block w-2.5 h-2.5 bg-[#d4af37] shadow-[0_0_12px_#d4af37] mr-3 animate-ping" />
-        LOADING MAISON...
+      <main className="flex min-h-screen flex-col items-center justify-center gap-6 font-code text-xs text-[#d4af37] tracking-[0.25em] uppercase">
+        <img
+          src="/logo-mark.png"
+          alt="BreezePost"
+          className="h-14 w-auto animate-pulse drop-shadow-[0_0_20px_rgba(212,175,55,0.4)]"
+        />
+        <span className="flex items-center">
+          <span className="inline-block w-2.5 h-2.5 bg-[#d4af37] shadow-[0_0_12px_#d4af37] mr-3 animate-ping" />
+          LOADING MAISON...
+        </span>
       </main>
     );
   }

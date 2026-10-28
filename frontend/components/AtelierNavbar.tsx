@@ -16,7 +16,12 @@ export function AtelierNavbar({ userEmail, signOut }: AtelierNavbarProps) {
     <header className="fixed top-0 left-0 w-full z-50 bg-[#08080a]/85 backdrop-blur-xl border-b border-[#d4af37]/25">
       <div className="h-16 md:h-20 w-full px-4 sm:px-6 lg:px-12 flex items-center justify-between gap-3 sm:gap-6">
         {/* Brand Mark */}
-        <Link href="/" className="min-w-0">
+        <Link href="/" className="flex items-center gap-3 min-w-0">
+          <img
+            src="/logo-mark.png"
+            alt="BreezePost monogram"
+            className="h-8 md:h-9 w-auto shrink-0 drop-shadow-[0_0_10px_rgba(212,175,55,0.35)]"
+          />
           <span className="text-lg md:text-xl xl:text-2xl font-[900] tracking-[0.18em] md:tracking-[0.25em] text-white uppercase font-display whitespace-nowrap">
             BREEZEPOST
           </span>
