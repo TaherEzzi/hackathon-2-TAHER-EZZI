@@ -84,7 +84,7 @@ export function ConnectPanel() {
   const isLinked = Boolean(link?.linked_at);
 
   return (
-    <div className="w-full px-6 lg:px-12 py-10 lg:py-16 flex flex-col justify-between min-h-[calc(100vh-10rem)] max-w-6xl mx-auto">
+    <div className="w-full px-4 sm:px-6 lg:px-12 py-10 lg:py-16 flex flex-col justify-between min-h-[calc(100dvh-9rem)] max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex flex-col items-center text-center pt-2 pb-4">
         <span className="text-xs text-[#d4af37] tracking-[0.3em] font-bold uppercase font-code mb-3">
@@ -100,7 +100,7 @@ export function ConnectPanel() {
         {/* Card 01: Telegram Dispatch */}
         <div
           onClick={copyCode}
-          className="bg-[#0e0e11]/85 backdrop-blur-md border border-[#d4af37]/35 p-8 flex flex-col justify-between h-[280px] shadow-[0_8px_32px_rgba(0,0,0,0.6)] hover:border-[#d4af37] transition-all cursor-pointer group"
+          className="bg-[#0e0e11]/85 backdrop-blur-md border border-[#d4af37]/35 p-5 sm:p-8 flex flex-col justify-between min-h-[220px] md:h-[280px] md:min-h-[280px] shadow-[0_8px_32px_rgba(0,0,0,0.6)] hover:border-[#d4af37] transition-all cursor-pointer group"
         >
           <div className="flex items-start justify-between">
             <span className="text-xs text-[#d4af37] tracking-[0.25em] font-bold uppercase font-code">
@@ -140,7 +140,7 @@ export function ConnectPanel() {
         </div>
 
         {/* Card 02: Instagram Feed */}
-        <div className="bg-[#0e0e11]/85 backdrop-blur-md border border-[#d4af37]/35 p-8 flex flex-col justify-between h-[280px] shadow-[0_8px_32px_rgba(0,0,0,0.6)] hover:border-[#d4af37] transition-all">
+        <div className="bg-[#0e0e11]/85 backdrop-blur-md border border-[#d4af37]/35 p-5 sm:p-8 flex flex-col justify-between min-h-[220px] md:h-[280px] md:min-h-[280px] shadow-[0_8px_32px_rgba(0,0,0,0.6)] hover:border-[#d4af37] transition-all">
           <div className="flex items-start justify-between">
             <span className="text-xs text-[#d4af37] tracking-[0.25em] font-bold uppercase font-code">
               INSTAGRAM
@@ -170,7 +170,7 @@ export function ConnectPanel() {
           type="button"
           disabled={busy}
           onClick={openAtelier}
-          className="inline-flex items-center gap-3 px-12 py-4 bg-[#d4af37] hover:bg-[#f2ca50] text-[#0b0b0d] font-code font-[800] text-sm tracking-[0.3em] uppercase transition-all duration-300 shadow-[0_0_35px_rgba(212,175,55,0.4)] hover:shadow-[0_0_50px_rgba(242,202,80,0.65)] hover:-translate-y-0.5 cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-3 px-8 sm:px-12 py-4 bg-[#d4af37] hover:bg-[#f2ca50] text-[#0b0b0d] font-code font-[800] text-xs sm:text-sm tracking-[0.3em] uppercase transition-all duration-300 shadow-[0_0_35px_rgba(212,175,55,0.4)] hover:shadow-[0_0_50px_rgba(242,202,80,0.65)] hover:-translate-y-0.5 cursor-pointer disabled:opacity-50"
         >
           <span>{busy ? "OPENING..." : "GO TO DASHBOARD"}</span>
           <span className="material-symbols-outlined text-[18px]">arrow_forward</span>

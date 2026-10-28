@@ -56,7 +56,7 @@ export default function LandingPage() {
 
       {/* Main Monumental Hero Content matching Atelier — Landing */}
       <main className="w-full pt-20 flex-1 relative flex flex-col justify-between">
-        <div className="w-full px-6 lg:px-12 py-12 lg:py-20 flex flex-col justify-between min-h-[calc(100vh-10rem)] max-w-7xl mx-auto">
+        <div className="w-full px-6 lg:px-12 py-12 lg:py-20 flex flex-col justify-between min-h-[calc(100dvh-10rem)] max-w-7xl mx-auto">
           {/* Top Registry Indicator */}
           <div className="flex items-center justify-between w-full pt-4">
             <div className="flex items-center gap-3">

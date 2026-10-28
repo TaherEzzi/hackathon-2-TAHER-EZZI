@@ -125,7 +125,7 @@ export function AssetLocker() {
   const td = "px-4 py-3 align-middle border-b border-[#d4af37]/10";
 
   return (
-    <div className="w-full px-6 lg:px-12 py-10 max-w-5xl mx-auto flex flex-col min-h-[calc(100vh-10rem)]">
+    <div className="w-full px-6 lg:px-12 py-10 max-w-5xl mx-auto flex flex-col min-h-[calc(100dvh-9rem)]">
       {/* Header */}
       <div className="mb-8">
         <span className="font-code text-xs font-bold text-[#d4af37] tracking-[0.35em] uppercase block mb-2">
@@ -145,9 +145,22 @@ export function AssetLocker() {
         </div>
       )}
 
-      {/* Product table */}
-      <div className="w-full bg-[#08080a]/80 border border-[#d4af37]/25 overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse">
+      {/* Hidden file input — shared by desktop table row and mobile card upload */}
+      <input
+        ref={draftFileInput}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        aria-label="Product image file"
+        onChange={(e) => {
+          const f = e.target.files?.[0] ?? null;
+          setDraft((d) => (d ? { ...d, file: f, previewUrl: f ? URL.createObjectURL(f) : null } : d));
+        }}
+      />
+
+      {/* Product table (desktop) */}
+      <div className="hidden md:block w-full bg-[#08080a]/80 border border-[#d4af37]/25 overflow-x-auto">
+        <table className="w-full border-collapse">
           <thead>
             <tr>
               <th className={`${th} w-20`}>Image</th>
@@ -170,19 +183,6 @@ export function AssetLocker() {
                     <span className="material-symbols-outlined text-[18px]">upload</span>
                     <span className="font-code text-[7px] tracking-widest mt-0.5">UPLOAD</span>
                   </button>
-                  <input
-                    ref={draftFileInput}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    aria-label="Product image file"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] ?? null;
-                      setDraft((d) =>
-                        d ? { ...d, file: f, previewUrl: f ? URL.createObjectURL(f) : null } : d,
-                      );
-                    }}
-                  />
                 </td>
                 <td className={td}>
                   <input
@@ -273,13 +273,105 @@ export function AssetLocker() {
         </table>
       </div>
 
+      {/* Product cards (mobile) */}
+      <div className="md:hidden flex flex-col gap-3">
+        {draft && (
+          <div className="bg-[#d4af37]/[0.06] border border-[#d4af37]/40 p-4 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              {draft.previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={draft.previewUrl} alt="New product preview" className="w-16 h-16 object-cover border border-[#d4af37]/40" />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => draftFileInput.current?.click()}
+                  className="w-16 h-16 border border-dashed border-[#d4af37]/60 flex flex-col items-center justify-center text-[#d4af37] hover:bg-[#d4af37]/10 cursor-pointer transition-colors shrink-0"
+                  aria-label="Upload product image"
+                >
+                  <span className="material-symbols-outlined text-[20px]">upload</span>
+                  <span className="font-code text-[7px] tracking-widest mt-0.5">UPLOAD</span>
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void saveDraft()}
+                className="flex-1 px-4 py-2.5 bg-[#d4af37] text-[#0b0b0d] font-bold text-[11px] tracking-[0.2em] uppercase cursor-pointer disabled:opacity-40"
+              >
+                SAVE
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setDraft(null)}
+                className="px-3 py-2.5 border border-[#d4af37]/40 text-neutral-300 text-[11px] font-bold tracking-[0.2em] uppercase cursor-pointer disabled:opacity-40"
+                aria-label="Discard new product"
+              >
+                ✕
+              </button>
+            </div>
+            <input
+              autoFocus
+              className="field font-body"
+              placeholder="Product name"
+              value={draft.title}
+              onChange={(e) => setDraft((d) => (d ? { ...d, title: e.target.value } : d))}
+            />
+            <input
+              className="field font-body"
+              placeholder="Short description"
+              value={draft.highlight}
+              onChange={(e) => setDraft((d) => (d ? { ...d, highlight: e.target.value } : d))}
+            />
+          </div>
+        )}
+
+        {loading ? (
+          <div className="bg-[#08080a]/80 border border-[#d4af37]/25 px-4 py-12 text-center font-code text-xs text-[#d4af37] tracking-[0.25em] uppercase">
+            Loading products...
+          </div>
+        ) : products.length === 0 && !draft ? (
+          <div className="bg-[#08080a]/80 border border-[#d4af37]/25 px-4 py-12 text-center font-code text-xs text-neutral-400 tracking-[0.2em] uppercase">
+            No products yet — add your first one.
+          </div>
+        ) : (
+          products.map((p) => (
+            <div key={p.id} className="bg-[#08080a]/80 border border-[#d4af37]/25 p-3 flex items-center gap-3">
+              <div className="w-14 h-14 shrink-0 overflow-hidden border border-[#d4af37]/25 bg-[#0b0b0d]">
+                {p.image_path ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={normalizeImagePath(p.image_path) ?? undefined} alt={p.title} className="w-full h-full object-cover" loading="lazy" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <span className="material-symbols-outlined text-[16px] text-[#d4af37]/40">image</span>
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-white font-semibold truncate">{p.title}</div>
+                <div className="text-xs text-neutral-300 truncate mt-0.5">{p.highlight ?? "—"}</div>
+              </div>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void removeProduct(p)}
+                className="p-2 -mr-1 text-neutral-400 hover:text-red-300 hover:bg-red-950/30 cursor-pointer disabled:opacity-40"
+                aria-label={`Remove ${p.title}`}
+              >
+                <span className="material-symbols-outlined text-[18px]">delete</span>
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
       {/* Actions */}
       <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <button
           type="button"
           onClick={addDraftRow}
           disabled={busy || draft !== null}
-          className="px-6 py-3 border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0b0b0d] font-code font-bold text-xs tracking-[0.25em] uppercase transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40"
+          className="w-full sm:w-auto px-6 py-3 border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0b0b0d] font-code font-bold text-xs tracking-[0.25em] uppercase transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
         >
           <span className="material-symbols-outlined text-[16px] font-bold">add</span>
           <span>ADD NEW PRODUCT</span>
@@ -288,7 +380,7 @@ export function AssetLocker() {
           type="button"
           onClick={() => void continueToConnect()}
           disabled={busy}
-          className="px-8 py-3.5 bg-[#d4af37] hover:bg-[#f2ca50] text-[#0b0b0d] font-bold text-xs tracking-[0.25em] uppercase flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(212,175,55,0.35)] transition-all cursor-pointer disabled:opacity-50"
+          className="w-full sm:w-auto px-8 py-3.5 bg-[#d4af37] hover:bg-[#f2ca50] text-[#0b0b0d] font-bold text-xs tracking-[0.25em] uppercase flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(212,175,55,0.35)] transition-all cursor-pointer disabled:opacity-50"
         >
           <span>CONTINUE TO CONNECT</span>
           <span className="material-symbols-outlined text-[16px] font-bold">arrow_forward</span>

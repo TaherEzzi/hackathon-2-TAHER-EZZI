@@ -45,7 +45,7 @@ export default function OnboardingLayout({ children }: { children: ReactNode }) 
           userEmail={auth.profile?.email}
           signOut={() => void auth.signOut()}
         />
-        <main className="w-full pt-20 flex-1 relative flex flex-col justify-between">
+        <main className="w-full pt-16 md:pt-20 flex-1 relative flex flex-col justify-between">
           {children}
         </main>
         <AtelierFooter />

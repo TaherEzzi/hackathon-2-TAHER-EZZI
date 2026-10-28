@@ -68,7 +68,7 @@ export function IdentityForm() {
   };
 
   return (
-    <div className="w-full px-6 lg:px-12 py-10 lg:py-14 flex flex-col justify-between min-h-[calc(100vh-10rem)] max-w-5xl mx-auto">
+    <div className="w-full px-6 lg:px-12 py-10 lg:py-14 flex flex-col justify-between min-h-[calc(100dvh-9rem)] max-w-5xl mx-auto">
       {/* Title Header */}
       <div className="text-center pt-2 pb-6">
         <span className="font-code text-xs font-bold text-[#d4af37] tracking-[0.35em] uppercase block mb-2">
