@@ -39,14 +39,9 @@ function DashNav({ onNavigate }: { onNavigate?: () => void }) {
 /** Brand lockup shared by the desktop rail and the mobile drawer. */
 function DashBrand() {
   return (
-    <div className="flex items-center gap-3">
-      <span className="font-display font-[900] text-lg tracking-[0.2em] text-white">
-        BREEZEPOST
-      </span>
-      <span className="px-1.5 py-0.5 bg-[#d4af37] text-[#0b0b0d] text-[9px] font-extrabold tracking-[0.15em] font-code">
-        THE ATELIER
-      </span>
-    </div>
+    <span className="font-display font-[900] text-lg tracking-[0.2em] text-white">
+      BREEZEPOST
+    </span>
   );
 }
 

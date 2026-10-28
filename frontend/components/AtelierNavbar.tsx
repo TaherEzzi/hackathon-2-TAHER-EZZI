@@ -68,9 +68,6 @@ export function AtelierNavbar({ userEmail, signOut, onEnterAtelier }: AtelierNav
           <span className="text-lg md:text-xl xl:text-2xl font-[900] tracking-[0.18em] md:tracking-[0.25em] text-white uppercase font-display whitespace-nowrap">
             BREEZEPOST
           </span>
-          <span className="hidden md:inline-block px-2.5 py-0.5 bg-[#d4af37] text-[#0b0b0d] text-[10px] font-[800] tracking-[0.2em] uppercase font-display shadow-[0_0_12px_rgba(212,175,55,0.4)]">
-            THE ATELIER
-          </span>
         </Link>
 
         {/* Center Architectural Navigation (desktop) */}
