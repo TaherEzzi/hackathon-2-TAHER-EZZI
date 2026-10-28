@@ -62,7 +62,13 @@ class Config:
 
     # ── OpenRouter (text captions + quality image fallback) ──────────────
     openrouter_api_key: Optional[str] = _get("OPENROUTER_API_KEY")
-    openrouter_text_model: str = _get("OPENROUTER_TEXT_MODEL", default="meta-llama/llama-3.3-70b-instruct:free") or ""
+    openrouter_text_model: str = _get("OPENROUTER_TEXT_MODEL", default="nvidia/nemotron-3.5-super-vl:free") or ""
+    # Comma-separated ladder of extra free models tried when the primary is
+    # rate-limited (upstream :free pools are shared and frequently 429).
+    openrouter_fallback_models: str = _get(
+        "OPENROUTER_FALLBACK_MODELS",
+        default="nvidia/nemotron-3.5-lightning:free,dots-studio/dots-3-note-preview:free,poolside/laguna-s-2.1:free,google/gemma-4-31b-it:free",
+    ) or ""
     openrouter_image_model: str = _get("OPENROUTER_IMAGE_MODEL", default="google/gemini-2.5-flash-image") or ""
 
     # ── Optional xAI fallback for captions (key already in .env) ────────

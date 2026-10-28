@@ -108,18 +108,23 @@ def generate_caption(
     )
 
     errors: List[str] = []
-    if config.openrouter_api_key:
+    # Ladder: primary free model, then the configured fallback pool. Upstream
+    # `:free` model pools are shared and rate-limit unpredictably, so a static
+    # choice dies; rotating slugs keeps a demo alive on the same free quota.
+    models = [config.openrouter_text_model] if config.openrouter_text_model else []
+    models += [m.strip() for m in config.openrouter_fallback_models.split(",") if m.strip()]
+    for model in models:
+        if not config.openrouter_api_key:
+            break
         try:
             content = _chat(
                 "https://openrouter.ai/api/v1", config.openrouter_api_key,
-                config.openrouter_text_model, _CAPTION_SYSTEM, user,
+                model, _CAPTION_SYSTEM, user,
             )
             return _parse_content(content)
         except Exception as exc:  # noqa: BLE001 — ladder semantics, log and fall through
-            log.warning("OpenRouter caption failed: %s", exc)
-            errors.append(f"openrouter: {exc}")
-    else:
-        errors.append("openrouter: not configured")
+            log.warning("OpenRouter caption failed (%s): %s", model, exc)
+            errors.append(f"openrouter[{model}]: {exc}")
 
     if config.grok_api_key:
         try:
