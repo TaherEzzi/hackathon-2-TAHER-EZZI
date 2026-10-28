@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { PostFrequency, PostRow, TgLinkRow } from "@/lib/types";
 import { useAuth } from "@/lib/useProfile";
 import { supabase } from "@/lib/supabase";
+import { StepNav } from "@/components/StepNav";
 
 /** Shared dashboard navigation — rendered inside the desktop rail and the mobile drawer. */
 function DashNav({ onNavigate }: { onNavigate?: () => void }) {
@@ -251,6 +252,9 @@ export default function DashboardPage() {
               <h1 className="text-3xl sm:text-6xl lg:text-7xl font-display font-[900] tracking-[-0.02em] text-white uppercase leading-none">
                 THE BENCH <span className="text-[#d4af37]">/</span> EDITORIAL PIPELINE
               </h1>
+              <div className="mt-8">
+                <StepNav />
+              </div>
             </div>
 
             {/* Ledger Queue Rows */}

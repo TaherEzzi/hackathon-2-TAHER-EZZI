@@ -6,6 +6,7 @@ import { AtelierNavbar } from "@/components/AtelierNavbar";
 import { AtelierFooter } from "@/components/AtelierFooter";
 import { AuthCard } from "@/components/AuthCard";
 import { PlanStage } from "@/components/PlanStage";
+import { StepNav } from "@/components/StepNav";
 import { useAuth } from "@/lib/useProfile";
 
 const STEP_ROUTES = new Map<number, string>([
@@ -39,6 +40,9 @@ export default function LandingPage() {
           signOut={() => void signOut()}
         />
         <main className="w-full pt-28 pb-16 flex-1 flex flex-col justify-center items-center px-6 lg:px-12 max-w-6xl mx-auto">
+          <div className="w-full max-w-5xl mx-auto mb-12">
+            <StepNav />
+          </div>
           <PlanStage profile={profile} patchProfile={patchProfile} />
         </main>
         <AtelierFooter />
@@ -51,7 +55,6 @@ export default function LandingPage() {
       <AtelierNavbar
         userEmail={profile?.email}
         signOut={session ? () => void signOut() : undefined}
-        onEnterAtelier={() => setShowAuthModal(true)}
       />
 
       {/* Main Monumental Hero Content matching Atelier — Landing */}
@@ -96,6 +99,11 @@ export default function LandingPage() {
                 </span>
               </span>
             </button>
+
+            {/* Section index — lives in the hero, not the navbar */}
+            <div className="w-full mt-12">
+              <StepNav />
+            </div>
           </div>
 
           {/* 4 Minimal Bold Status Badges */}

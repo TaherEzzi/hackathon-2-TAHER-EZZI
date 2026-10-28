@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { AtelierNavbar } from "@/components/AtelierNavbar";
 import { AtelierFooter } from "@/components/AtelierFooter";
+import { StepNav } from "@/components/StepNav";
 import { OnboardingContext } from "@/components/onboarding-context";
 import { useAuth } from "@/lib/useProfile";
 
@@ -46,6 +47,9 @@ export default function OnboardingLayout({ children }: { children: ReactNode }) 
           signOut={() => void auth.signOut()}
         />
         <main className="w-full pt-16 md:pt-20 flex-1 relative flex flex-col justify-between">
+          <div className="w-full px-6 lg:px-12 pt-6">
+            <StepNav />
+          </div>
           {children}
         </main>
         <AtelierFooter />
