@@ -1,0 +1,8 @@
+# Secrets and runtime artifacts — never commit
+.env
+*.pyc
+__pycache__/
+.venv/
+venv/
+.pytest_cache/
+scripts/__pycache__/
