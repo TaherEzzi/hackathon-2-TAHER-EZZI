@@ -111,7 +111,7 @@ def count_posts_today(profile_id: str, slot_date: str) -> int:
         .select("id", count="exact")
         .eq("profile_id", profile_id)
         .eq("slot_date", slot_date)
-        .ne("status", "failed")
+        .neq("status", "failed")
         .execute()
     )
     return resp.count or 0
