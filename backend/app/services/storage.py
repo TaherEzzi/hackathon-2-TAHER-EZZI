@@ -15,6 +15,21 @@ from ..db import client  # reuse the singleton service-role client
 log = logging.getLogger(__name__)
 
 
+def object_url(stored: str) -> str:
+    """Resolve `products.image_path` to one fetchable URL.
+
+    The web app stores the full public URL. Older rows store
+    `<bucket>/<object>`. Prefix only the relative form.
+
+    Raises RuntimeError when a relative path has no SUPABASE_URL.
+    """
+    if stored.startswith("http://") or stored.startswith("https://"):
+        return stored
+    if not config.supabase_url:
+        raise RuntimeError("SUPABASE_URL not configured; cannot build public URL")
+    return f"{config.supabase_url.rstrip('/')}/storage/v1/object/public/{stored.lstrip('/')}"
+
+
 def public_url(bucket: str, path: str) -> str:
     """Canonical public object URL.
 

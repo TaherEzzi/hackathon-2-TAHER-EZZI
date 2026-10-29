@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const STEPS = [
-  { numeral: "I.", label: "PLAN", href: "/" },
+  { numeral: "I.", label: "PLAN", href: "/onboarding/plan" },
   { numeral: "II.", label: "IDENTITY", href: "/onboarding/identity" },
   { numeral: "III.", label: "THEMES", href: "/onboarding/themes" },
   { numeral: "IV.", label: "ASSETS", href: "/onboarding/assets" },

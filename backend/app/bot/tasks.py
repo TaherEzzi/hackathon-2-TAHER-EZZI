@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Optional
 
+import requests
+
 from .. import db
 from ..config import config
 from ..services import images, storage, text
@@ -50,10 +52,14 @@ def pick_preset(profile: Dict[str, Any], explicit_preset_id: Optional[int]) -> O
     sel = db.client().table("theme_selection").select("preset_id").eq("profile_id", profile["id"]).execute()
     preset_ids = [r["preset_id"] for r in (sel.data or [])]
     love = db.select_in("theme_preset", "id", preset_ids) if preset_ids else []
+    cat = (profile.get("category") or "").strip().lower()
+    if cat:
+        # Saved selections outlive a category switch; drop the old category so
+        # a product is never staged in another category's scene.
+        love = [p for p in love if (p.get("category") or "").strip().lower() == cat]
     if love:
         return random.choice(love)
     # Fall back to category presets so first-run profiles still demo.
-    cat = profile.get("category")
     if cat:
         fallbacks = db.theme_presets_for_categories(cat)
         if fallbacks:
@@ -67,27 +73,29 @@ def pick_product(profile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 def _fetch_product_image(product: Dict[str, Any]) -> Optional[bytes]:
-    """Download the product's stored photo for img2img anchoring.
+    """Download the product photo Klein needs as the image input.
 
-    `products.image_path` is `<bucket>/<profile>/<file>` — the public object
-    URL is therefore base + /storage/v1/object/public/<path>. Any failure
-    returns None, which degrades the ladder to text-only instead of dying.
+    Returns None only when the row has no photo path. A failed download
+    raises GenerationError with the HTTP status or the request error.
     """
     path = product.get("image_path")
-    if not path:
+    if not isinstance(path, str) or not path.strip():
         return None
     try:
-        import requests  # local import: only needed on this path
-
-        resp = requests.get(
-            f"{config.supabase_url}/storage/v1/object/public/{path}",
-            timeout=30,
-        )
-        if resp.ok and resp.content:
-            return resp.content
-    except Exception as exc:  # noqa: BLE001 — degrade, never crash the slot
-        log.warning("product photo fetch failed (%s): %s", path, exc)
-    return None
+        resp = requests.get(storage.object_url(path.strip()), timeout=30)
+    except Exception as exc:  # noqa: BLE001 — boundary keeps the cause
+        log.warning("product photo fetch failed: %s", exc)
+        raise images.GenerationError("flux-2-klein: product photo download failed") from exc
+    if resp.ok and resp.content:
+        return bytes(resp.content)
+    log.warning(
+        "product photo fetch failed status=%s bytes=%d",
+        resp.status_code,
+        len(resp.content or b""),
+    )
+    raise images.GenerationError(
+        f"flux-2-klein: product photo download failed (status={resp.status_code})"
+    )
 
 
 def generate_post(
@@ -107,8 +115,14 @@ def generate_post(
     and a `revision` history row is appended; for fresh generation we INSERT
     status='awaiting_review'.
     """
-    preset = pick_preset(profile, preset_id)
-    product = pick_product(profile)
+    preset = pick_preset(profile, preset_id or (base_post or {}).get("preset_id"))
+    # A revision must keep the product it was generated from; re-picking would
+    # swap the photo under the user's feedback (observed: can → bottle).
+    if base_post is not None and base_post.get("product_id"):
+        rows = db.select("products", {"id": base_post["product_id"]}, limit=1)
+        product = rows[0] if rows else pick_product(profile)
+    else:
+        product = pick_product(profile)
     if revision_feedback is None and (preset is None or product is None):
         # Fresh slot without inputs is unrecoverable; revisions must have a base.
         raise SlotNotViable(
@@ -118,14 +132,25 @@ def generate_post(
 
     is_revision = base_post is not None
 
-    # 1. Image via provider ladder. When the product has a stored photo we
-    #    anchor the render to it (img2img, preserving the real product); the
-    #    prompt's own guardrail text still demands the same.
+    # 1. Image via flux-2-klein: the stored product photo plus the prompt.
+    #    Klein is the only image model for a post; if Cloudflare's filter
+    #    rejects the photo on every attempt (trademarked packaging trips it
+    #    consistently), a text-only render keeps the slot deliverable.
     prompt = images.build_image_prompt(preset, product, profile, revision_feedback)
-    product_image = _fetch_product_image(product)
-    # 512 dev-mode (user call, 2026-10-28): quadruples free-render volume while
-    # developing. Restore to 1024 for demo-day quality once dev wraps.
-    image = images.generate_image_edit(product_image, prompt, size=512)
+    product_image = _fetch_product_image(product) if product else None
+    fallback_notice = ""
+    try:
+        image = images.generate_image_edit(product_image, prompt)
+    except images.PolicyFlagged as exc:
+        log.warning("product-anchored render blocked, using text-only fallback: %s", exc)
+        image = images.generate_image(
+            images.build_image_prompt(preset, product, profile, revision_feedback, text_only=True)
+        )
+        fallback_notice = (
+            "\n\n⚠️ Cloudflare's safety filter blocked this product photo "
+            "(trademarked packaging), so this is a text-only interpretation — "
+            "not a retouched version of your image."
+        )
 
     # 2. Caption via text ladder.
     caption, hashtags = text.generate_caption(preset, profile=profile, product=product, revision_feedback=revision_feedback)
@@ -136,6 +161,7 @@ def generate_post(
 
     now = datetime.now(timezone.utc)
     chat_text = f"{caption}\n\n{' '.join(hashtags)}".strip() if hashtags else caption
+    chat_text += fallback_notice
 
     if is_revision and base_post is not None:
         seq = int(base_post.get("revision_count") or 0) + 1
@@ -163,6 +189,10 @@ def generate_post(
             slot_index=slot_index,
         )
 
+    # On-demand posts have no scheduler slot. `post.slot_index` is NOT NULL,
+    # so store 0; slot_date stays NULL, which keeps the scheduler's
+    # (profile_id, slot_date, slot_index) uniqueness intact.
+    stored_slot_index = slot_index if slot_index is not None else 0
     row = db.insert("post", {
         "profile_id": profile["id"],
         "status": "awaiting_review",
@@ -173,7 +203,7 @@ def generate_post(
         "hashtags": hashtags,
         "scheduled_for": now.isoformat(),  # = generated now for on-demand posts
         "slot_date": slot_date.isoformat() if slot_date else None,
-        "slot_index": slot_index,
+        "slot_index": stored_slot_index,
         "revision_count": 0,
     })
     log.info("Post %s generated (provider=%s, %d bytes)", row.get("id"), image.provider, len(image.jpeg_bytes))
@@ -183,5 +213,5 @@ def generate_post(
         image_url=image_url,
         revision_count=0,
         slot_date=slot_date,
-        slot_index=slot_index,
+        slot_index=stored_slot_index,
     )

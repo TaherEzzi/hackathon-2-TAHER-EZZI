@@ -1,54 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AtelierNavbar } from "@/components/AtelierNavbar";
 import { AtelierFooter } from "@/components/AtelierFooter";
 import { AuthCard } from "@/components/AuthCard";
-import { PlanStage } from "@/components/PlanStage";
 import { StepNav } from "@/components/StepNav";
 import { useAuth } from "@/lib/useProfile";
 
-const STEP_ROUTES = new Map<number, string>([
-  [2, "/onboarding/identity"],
-  [3, "/onboarding/themes"],
-  [4, "/onboarding/assets"],
-]);
+/** Resume where onboarding left off (steps are set by each stage's save). */
+function nextStepRoute(step?: number): string {
+  const s = step ?? 0;
+  if (s >= 5) return "/dashboard";
+  if (s >= 4) return "/onboarding/assets";
+  if (s >= 3) return "/onboarding/themes";
+  if (s >= 2) return "/onboarding/identity";
+  return "/onboarding/plan";
+}
 
 export default function LandingPage() {
   const router = useRouter();
-  const { loading, session, profile, patchProfile, signOut } = useAuth();
+  const { session, profile, signOut } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
 
-  useEffect(() => {
-    if (loading || !session || !profile) return;
-    const step = profile.onboarding_step ?? 0;
-    if (step >= 5) {
-      router.replace("/dashboard");
-    } else if (step >= 2) {
-      const href = STEP_ROUTES.get(step);
-      if (href) router.replace(href);
+  const enterAtelier = () => {
+    if (session) {
+      router.push(nextStepRoute(profile?.onboarding_step));
+      return;
     }
-  }, [loading, session, profile, router]);
-
-  // If signed in and in stage 1, display Screen II. The Plan
-  if (!loading && session && profile && (profile.onboarding_step ?? 0) <= 1) {
-    return (
-      <div className="min-h-screen flex flex-col justify-between relative z-10">
-        <AtelierNavbar
-          userEmail={profile.email}
-          signOut={() => void signOut()}
-        />
-        <main className="w-full pt-28 pb-16 flex-1 flex flex-col justify-center items-center px-6 lg:px-12 max-w-6xl mx-auto">
-          <div className="w-full max-w-5xl mx-auto mb-12">
-            <StepNav />
-          </div>
-          <PlanStage profile={profile} patchProfile={patchProfile} />
-        </main>
-        <AtelierFooter />
-      </div>
-    );
-  }
+    setShowAuthModal(true);
+  };
 
   return (
     <div className="min-h-screen flex flex-col justify-between relative z-10">
@@ -94,7 +75,7 @@ export default function LandingPage() {
             {/* Bold Punchy CTA */}
             <button
               type="button"
-              onClick={() => setShowAuthModal(true)}
+              onClick={enterAtelier}
               className="group relative inline-flex items-center justify-center px-12 py-5 bg-[#d4af37] hover:bg-[#f2ca50] text-[#0b0b0d] font-code font-[800] text-sm tracking-[0.3em] uppercase transition-all duration-300 shadow-[0_0_35px_rgba(212,175,55,0.4)] hover:shadow-[0_0_50px_rgba(242,202,80,0.65)] hover:-translate-y-0.5 cursor-pointer"
             >
               <span className="relative z-10 flex items-center gap-3">

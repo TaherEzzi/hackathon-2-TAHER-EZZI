@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import time
 from typing import Tuple
 
 import requests
@@ -25,11 +26,15 @@ log = logging.getLogger(__name__)
 
 TIMEOUT_SECS = 60
 MAX_IG_CAPTION_CHARS = 2200
+# Instagram processes a container asynchronously; publishing before it is
+# FINISHED returns "Media ID is not available". Poll briefly instead.
+CONTAINER_POLL_SECS = 45
+CONTAINER_POLL_INTERVAL = 3
 
 
 class PublishError(RuntimeError):
-    """Raised on real-mode failure; the bot notifies the user and the post
-    row is marked `failed` rather than left dangling in awaiting_review."""
+    """Raised on real-mode failure; the bot keeps the post in
+    awaiting_review so the user can retry."""
 
 
 def _graph_post(path: str, data: dict) -> dict:
@@ -42,6 +47,29 @@ def _graph_post(path: str, data: dict) -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def _wait_for_container(container_id: str) -> None:
+    url = f"https://graph.instagram.com/{config.ig_api_version}/{container_id}"
+    deadline = time.monotonic() + CONTAINER_POLL_SECS
+    while time.monotonic() < deadline:
+        resp = requests.get(
+            url,
+            params={"fields": "status_code"},
+            headers={"Authorization": f"Bearer {config.ig_access_token}"},
+            timeout=TIMEOUT_SECS,
+        )
+        resp.raise_for_status()
+        status = str(resp.json().get("status_code") or "").upper()
+        if status == "FINISHED":
+            return
+        if status in ("ERROR", "EXPIRED"):
+            raise PublishError(f"Instagram rejected the media container ({status})")
+        time.sleep(CONTAINER_POLL_INTERVAL)
+    raise PublishError(
+        f"Instagram media container {container_id} was not ready after "
+        f"{CONTAINER_POLL_SECS}s"
+    )
 
 
 def publish(image_url: str, caption: str, hashtags: list[str] | None = None) -> Tuple[str, str]:
@@ -70,6 +98,7 @@ def publish(image_url: str, caption: str, hashtags: list[str] | None = None) -> 
     if not creation_id:
         raise PublishError(f"media container creation returned no id: {creation}")
 
+    _wait_for_container(str(creation_id))
     published = _graph_post(f"{config.ig_user_id}/media_publish", {"creation_id": creation_id})
     media_id = published.get("id")
     if not media_id:

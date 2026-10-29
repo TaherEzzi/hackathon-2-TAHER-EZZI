@@ -10,6 +10,7 @@ import { OnboardingContext } from "@/components/onboarding-context";
 import { useAuth } from "@/lib/useProfile";
 
 const PATH_TO_STEP: Array<[string, number]> = [
+  ["/onboarding/plan", 0],
   ["/onboarding/identity", 1],
   ["/onboarding/themes", 2],
   ["/onboarding/assets", 3],

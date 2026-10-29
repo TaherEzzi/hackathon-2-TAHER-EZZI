@@ -4,6 +4,8 @@ Command surface:
   /start [code]      — start chat; `code` from the ?start=<pairing_code> deep link pairs the chat
   /link <code>       — explicit pairing (same flow as /start <code>)
   /generate [preset#]— on-demand demo generation for a random/specific preset
+  /change <feedback> — regenerate the latest post with natural-language feedback
+  /post              — publish the latest generated/edited image to Instagram
   /status            — tier, schedule, last 5 posts
   /skip              — skip today's remaining slot
 Inline callbacks per post message:
@@ -18,9 +20,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Bot, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application, ApplicationBuilder, CallbackQueryHandler, CommandHandler,
@@ -65,6 +67,68 @@ async def send_post(bot: Bot, chat_id: int, payload: tasks.PostPayload) -> None:
         photo=payload.image_url,
         caption=(payload.chat_text or "")[:1024],  # Telegram caption limit
         reply_markup=keyboard_for(payload.post_id),
+    )
+
+
+def _latest_actionable_post(profile_id: str) -> Optional[Dict[str, Any]]:
+    """Newest post that /change and /post can act on: still awaiting review
+    and carrying a rendered image."""
+    for post in db.recent_posts(profile_id, limit=10):
+        if post.get("status") == "awaiting_review" and post.get("image_path"):
+            return post
+    return None
+
+
+def _publish_post_row(post: Dict[str, Any]) -> Tuple[str, str]:
+    """Publish one stored post → (ig_media_id, mode)."""
+    image_url = storage.public_url(config.bucket_generated_posts, post["image_path"])
+    return instagram.publish(image_url, post.get("caption") or "", post.get("hashtags"))
+
+
+def _mark_published(post_id: str, media_id: str) -> None:
+    db.update("post", {"id": post_id}, {
+        "status": "published",
+        "ig_media_id": media_id,
+        "published_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+async def _revise_post(
+    update: Update, context: ContextTypes.DEFAULT_TYPE,
+    post: Dict[str, Any], feedback: str,
+) -> None:
+    """Regenerate image + caption for `post` from natural-language feedback,
+    enforcing the tier's per-post alteration budget."""
+    profile = db.get_profile(post["profile_id"])
+    if not profile:
+        await update.effective_message.reply_text("⚠️ That post no longer exists.")
+        return
+
+    budget = quotas.alteration_budget(profile.get("tier"))
+    used = int(post.get("revision_count") or 0)
+    if used >= budget:
+        await update.effective_message.reply_text("⚠️ Alteration budget exhausted for this post.")
+        return
+
+    await update.effective_message.reply_text(f"✏️ Reworking… (edit {used + 1}/{budget})")
+    try:
+        payload = await asyncio.to_thread(
+            tasks.generate_post, profile, post.get("preset_id"), feedback, post,
+        )
+    except Exception as exc:  # noqa: BLE001 — revision failure surfaces in-chat
+        log.exception("revision failed")
+        await update.effective_message.reply_text(f"💥 Revision failed: {exc}")
+        return
+    kb = keyboard_for(payload.post_id)
+    if used + 1 >= budget:  # last free edit: keep Approval/Skip only
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Approve & Post", callback_data=f"approve:{post['id']}"),
+            InlineKeyboardButton("⏭️ Skip Today", callback_data=f"skip:{post['id']}"),
+        ]])
+    await context.bot.send_photo(
+        chat_id=update.effective_chat.id, photo=payload.image_url,
+        caption=f"✏️ Revised (edit {used + 1}/{budget}):\n\n{payload.chat_text}"[:1024],
+        reply_markup=kb,
     )
 
 
@@ -149,6 +213,56 @@ async def cmd_generate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await send_post(context.bot, chat_id, payload)
 
 
+async def cmd_change(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/change <feedback> — apply a natural-language edit to the latest post."""
+    profile = _linked_profile(update.effective_chat.id)
+    if not profile:
+        await update.effective_message.reply_text("Link your brand first: /link <pairing_code>")
+        return
+    feedback = " ".join(context.args or []).strip()
+    if not feedback:
+        await update.effective_message.reply_text(
+            "Usage: /change <what to change>\n"
+            "e.g. /change brighter background, tighter crop, shorter caption"
+        )
+        return
+    post = _latest_actionable_post(profile["id"])
+    if not post:
+        await update.effective_message.reply_text("Nothing to change yet — send /generate first.")
+        return
+    await _revise_post(update, context, post, feedback)
+
+
+async def cmd_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/post — publish the latest generated (or revised) image to Instagram."""
+    profile = _linked_profile(update.effective_chat.id)
+    if not profile:
+        await update.effective_message.reply_text("Link your brand first: /link <pairing_code>")
+        return
+    post = _latest_actionable_post(profile["id"])
+    if not post:
+        await update.effective_message.reply_text(
+            "Nothing to post — send /generate (or /change) first, then /post."
+        )
+        return
+    await update.effective_message.reply_text("🚀 Publishing to Instagram…")
+    try:
+        media_id, mode = await asyncio.to_thread(_publish_post_row, post)
+    except Exception as exc:  # noqa: BLE001 — keep the post retryable
+        log.exception("manual publish failed")
+        await update.effective_message.reply_text(
+            f"💥 Publish failed: {exc}\nThe post is still here — send /post again once it's fixed."
+        )
+        return
+    _mark_published(post["id"], media_id)
+    if mode == "mock":
+        await update.effective_message.reply_text(
+            "✅ Marked as published (mock mode — nothing was actually sent to Instagram)."
+        )
+    else:
+        await update.effective_message.reply_text("✅ Posted to Instagram!")
+
+
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     profile = _linked_profile(update.effective_chat.id)
     if not profile:
@@ -219,14 +333,16 @@ async def _cb_approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     await query.answer("Publishing…")
     try:
-        media_id, mode = instagram.publish(image_url or "", post.get("caption") or "", post.get("hashtags"))
-        db.update("post", {"id": post["id"]}, {"status": "published", "ig_media_id": media_id, "published_at": datetime.now(timezone.utc).isoformat()})
-        tail = " (mock mode)" if mode == "mock" else ""
-        await query.edit_message_caption(caption=f"✅ Published to Instagram!{tail}\n\n{post.get('caption', '')}")
+        media_id, mode = await asyncio.to_thread(_publish_post_row, post)
+        _mark_published(post["id"], media_id)
+        tail = " (mock mode — nothing sent to Instagram)" if mode == "mock" else ""
+        await query.edit_message_caption(caption=f"✅ Published!{tail}\n\n{post.get('caption', '')}")
     except Exception as exc:  # noqa: BLE001 — publishing failures must not leave ambiguous UX
         log.exception("publish failed")
-        db.update("post", {"id": post["id"]}, {"status": "failed"})
-        await query.edit_message_caption(caption=f"💥 Publish failed: {exc}")
+        # Keep the row in awaiting_review so the user can tap Approve again.
+        await query.edit_message_caption(
+            caption=f"💥 Publish failed: {exc}\n\nThe draft is still here — tap ✅ Approve to retry."
+        )
 
 
 async def _cb_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -256,38 +372,10 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.application.bot_data.pop(f"pending_edit:{chat_id}", None)
     feedback = update.effective_message.text.strip()
     post = _post_lookup(post_id)
-    profile = db.get_profile(post["profile_id"]) if post else None
-    if not (post and profile):
+    if not post:
         await update.effective_message.reply_text("⚠️ That post no longer exists.")
         return
-
-    # Per-post alteration budget by tier (2 streak / 4 boost / 6 surge).
-    budget = quotas.alteration_budget(profile.get("tier"))
-    used = int(post.get("revision_count") or 0)
-    if used >= budget:
-        await update.effective_message.reply_text("⚠️ Alteration budget exhausted for this post.")
-        return
-
-    await update.effective_message.reply_text(f"✏️ Reworking… (edit {used + 1}/{budget})")
-    try:
-        payload = await asyncio.to_thread(
-            tasks.generate_post, profile, post.get("preset_id"), feedback, post,
-        )
-    except Exception as exc:  # noqa: BLE001 — revision failure surfaces in-chat
-        log.exception("revision failed")
-        await update.effective_message.reply_text(f"💥 Revision failed: {exc}")
-        return
-    kb = keyboard_for(payload.post_id)
-    if used + 1 >= budget:  # last free edit: keep Approval/Skip only
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Approve & Post", callback_data=f"approve:{post_id}"),
-            InlineKeyboardButton("⏭️ Skip Today", callback_data=f"skip:{post_id}"),
-        ]])
-    await context.bot.send_photo(
-        chat_id=chat_id, photo=payload.image_url,
-        caption=f"✏️ Revised (edit {used + 1}/{budget}):\n\n{payload.chat_text}"[:1024],
-        reply_markup=kb,
-    )
+    await _revise_post(update, context, post, feedback)
 
 
 def register(application: Application) -> None:
@@ -300,6 +388,8 @@ def register(application: Application) -> None:
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("link", cmd_link))
     application.add_handler(CommandHandler("generate", cmd_generate))
+    application.add_handler(CommandHandler("change", cmd_change))
+    application.add_handler(CommandHandler("post", cmd_post))
     application.add_handler(CommandHandler("status", cmd_status))
     application.add_handler(CommandHandler("skip", cmd_skip))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
@@ -322,6 +412,17 @@ async def start_polling(application: Application) -> None:
     """
     await application.initialize()
     await application.start()
+    try:
+        await application.bot.set_my_commands([
+            BotCommand("generate", "Generate a post now"),
+            BotCommand("change", "Revise the latest draft (say what to change)"),
+            BotCommand("post", "Publish the latest draft to Instagram"),
+            BotCommand("status", "Show your schedule and latest posts"),
+            BotCommand("skip", "Skip today's post"),
+            BotCommand("link", "Link this chat with a pairing code"),
+        ])
+    except Exception:  # noqa: BLE001 — the command menu is cosmetic; never block polling
+        log.warning("could not set bot command menu", exc_info=True)
     if application.updater:
         await application.updater.start_polling(drop_pending_updates=True)
     log.info("Telegram polling started")

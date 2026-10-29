@@ -46,6 +46,14 @@ def _get(*names: str, default: Optional[str] = None) -> Optional[str]:
     return default
 
 
+def _int_env(name: str, default: int) -> int:
+    raw = _get(name)
+    try:
+        return int(raw) if raw else default
+    except ValueError:
+        return default
+
+
 class Config:
     """Plain (non-pydantic) settings holder; only app code touches it."""
 
@@ -56,11 +64,38 @@ class Config:
         "SUPABASE_SECRET_KEY", "supabase_secret_key", "SUPABASE_SERVICE_ROLE_KEY",
     )
 
-    # ── Cloudflare Workers AI (primary image provider, FLUX.1-schnell) ───
+    # ── Cloudflare Workers AI (flux-2-klein for posts, chat model for captions) ──
     cloudflare_api_token: Optional[str] = _get("CLOUDFLARE_API_TOKEN")
     cloudflare_account_id: Optional[str] = _get("CLOUDFLARE_ACCOUNT_ID")
 
-    # ── OpenRouter (text captions + quality image fallback) ──────────────
+    # Image-edit model. klein-9b follows the reference photo (and renders
+    # label lettering) much more faithfully than the 4b distill at the same
+    # prompt; 4b stays one request away via CLOUDFLARE_EDIT_MODEL_FALLBACK.
+    cloudflare_edit_model: str = _get(
+        "CLOUDFLARE_EDIT_MODEL", default="@cf/black-forest-labs/flux-2-klein-4b",
+    ) or ""
+    cloudflare_edit_model_fallback: str = _get(
+        "CLOUDFLARE_EDIT_MODEL_FALLBACK", default="@cf/black-forest-labs/flux-2-klein-4b",
+    ) or ""
+
+    # Captions use a Workers AI chat model on the same account as Flux.
+    # Flux Klein only returns an image, so it cannot write the caption.
+    cloudflare_text_model: str = _get(
+        "CLOUDFLARE_TEXT_MODEL", default="@cf/meta/llama-3.1-8b-instruct-fp8",
+    ) or ""
+    # Tried in order when the primary model is retired or rate-limited.
+    # Why: Workers AI replaces models without notice (llama-3.1-8b-instruct
+    # was deprecated 2026-05-30 and started returning 410 Gone).
+    cloudflare_text_fallbacks: str = _get(
+        "CLOUDFLARE_TEXT_FALLBACKS",
+        default="@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    ) or ""
+
+    # Rendered post edge in px (square). 512 keeps the free-neuron budget for
+    # dev runs; set POST_IMAGE_SIZE=1024 for demo-day quality (TRUTH §8.6).
+    post_image_size: int = _int_env("POST_IMAGE_SIZE", 512)
+
+    # ── OpenRouter (unused by generation; kept so an old .env still loads) ─
     openrouter_api_key: Optional[str] = _get("OPENROUTER_API_KEY")
     openrouter_text_model: str = _get("OPENROUTER_TEXT_MODEL", default="nvidia/nemotron-3.5-super-vl:free") or ""
     # Comma-separated ladder of extra free models tried when the primary is
@@ -71,9 +106,11 @@ class Config:
     ) or ""
     openrouter_image_model: str = _get("OPENROUTER_IMAGE_MODEL", default="google/gemini-2.5-flash-image") or ""
 
-    # ── Optional xAI fallback for captions (key already in .env) ────────
-    grok_api_key: Optional[str] = _get("GROK_API_KEY", "grok_api_key")
-    grok_model: str = _get("GROK_MODEL", default="grok-3-mini") or ""
+    # ── Optional Groq fallback for captions (free tier; keys start with gsk_) ─
+    # The `.env` stores it as `grok_api_key` — same key, legacy name.
+    groq_api_key: Optional[str] = _get("GROQ_API_KEY", "GROK_API_KEY", "grok_api_key")
+    groq_base_url: str = _get("GROQ_BASE_URL", default="https://api.groq.com/openai/v1") or ""
+    groq_model: str = _get("GROQ_MODEL", default="openai/gpt-oss-120b") or ""
 
     # ── Telegram ─────────────────────────────────────────────────────────
     # NOT yet provisioned — code must start/fail gracefully without it.
@@ -109,7 +146,10 @@ class Config:
 
     @property
     def is_text_configured(self) -> bool:
-        return bool(self.openrouter_api_key or self.grok_api_key)
+        cloudflare = bool(
+            self.cloudflare_api_token and self.cloudflare_account_id and self.cloudflare_text_model
+        )
+        return cloudflare or bool(self.groq_api_key and self.groq_model)
 
     def require(self, *attrs: str) -> None:
         missing = [a for a in attrs if not getattr(self, a, None)]

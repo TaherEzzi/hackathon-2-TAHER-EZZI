@@ -20,7 +20,7 @@ export interface RailStep {
 }
 
 export const RAIL_STEPS: RailStep[] = [
-  { numeral: "I", label: "Plan", hint: "Tier & schedule", href: "/" },
+  { numeral: "I", label: "Plan", hint: "Tier & schedule", href: "/onboarding/plan" },
   { numeral: "II", label: "Identity", hint: "Brand & DNA", href: "/onboarding/identity" },
   { numeral: "III", label: "Themes", hint: "Style presets", href: "/onboarding/themes" },
   { numeral: "IV", label: "Assets", hint: "Product locker", href: "/onboarding/assets" },

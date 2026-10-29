@@ -106,6 +106,23 @@ export function AssetLocker() {
   const removeProduct = async (p: ProductRow) => {
     setProblem(null);
     setBusy(true);
+    // post.product_id is a plain FK (NO ACTION); detach history rows first or
+    // Postgres rejects the delete. Posts keep their image and caption.
+    const { error: detachError } = await supabase
+      .from("post")
+      .update({ product_id: null })
+      .eq("product_id", p.id);
+    if (detachError) {
+      setBusy(false);
+      return setProblem(detachError.message);
+    }
+    const { error } = await supabase.from("products").delete().eq("id", p.id);
+    if (error) {
+      setBusy(false);
+      return setProblem(error.message);
+    }
+    // Only clear the file after the row is gone, so a failed delete never
+    // leaves a row pointing at a missing image.
     try {
       const marker = `/object/public/${PRODUCT_IMAGES_BUCKET}/`;
       const idx = p.image_path?.indexOf(marker) ?? -1;
@@ -113,11 +130,9 @@ export function AssetLocker() {
         await supabase.storage.from(PRODUCT_IMAGES_BUCKET).remove([p.image_path!.slice(idx + marker.length)]);
       }
     } catch {
-      /* row removal still proceeds */
+      /* the row is already gone; an orphaned file is harmless */
     }
-    const { error } = await supabase.from("products").delete().eq("id", p.id);
     setBusy(false);
-    if (error) return setProblem(error.message);
     await list();
   };
 
@@ -143,6 +158,10 @@ export function AssetLocker() {
         </h1>
         <p className="mt-2 font-code text-xs text-neutral-400 tracking-[0.2em] uppercase">
           Every post is composed from a product here.
+        </p>
+        <p className="mt-2 font-code text-[10px] text-neutral-500 tracking-[0.15em] uppercase leading-relaxed">
+          One product per photo, centred on a plain background, at least 800px on the long edge, no
+          faces, text overlays or watermarks. Famous trademarks are blocked by the image provider.
         </p>
       </div>
 

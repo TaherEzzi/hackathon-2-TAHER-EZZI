@@ -181,4 +181,6 @@ def insert_failed_slot(
         "scheduled_for": None,
         "caption": None,
         "image_path": None,
+        # `post.slot_index` is NOT NULL; 0 is the on-demand/unknown default.
+        "slot_index": slot_index if slot_index is not None else 0,
     })
