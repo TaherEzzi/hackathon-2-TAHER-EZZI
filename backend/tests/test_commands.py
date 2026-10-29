@@ -54,6 +54,41 @@ class PostCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("/post again", texts[-1])
 
 
+class NewCommandTests(unittest.IsolatedAsyncioTestCase):
+    async def test_new_generates_from_a_different_product_and_retires_the_draft(self) -> None:
+        update, context = _update(), MagicMock()
+        context.bot.send_photo = AsyncMock()
+        current = {**POST, "product_id": "prod-1"}
+        payload = tasks.PostPayload(
+            post_id="p2", chat_text="cap", image_url="https://cdn/y.jpg",
+            revision_count=0, slot_date=None, slot_index=0,
+        )
+        with patch.object(handlers, "_linked_profile", return_value=PROFILE), \
+                patch.object(handlers, "_latest_post", return_value=current), \
+                patch.object(handlers.tasks, "generate_post", return_value=payload) as generate, \
+                patch.object(handlers.db, "update") as update_row:
+            await handlers.cmd_new(update, context)
+
+        generate.assert_called_once_with(
+            PROFILE, preset_id=current["preset_id"], exclude_product_id="prod-1",
+        )
+        update_row.assert_called_once_with("post", {"id": "p1"}, {"status": "skipped"})
+        context.bot.send_photo.assert_awaited_once()
+
+    async def test_new_explains_when_the_locker_has_only_one_product(self) -> None:
+        update, context = _update(), MagicMock()
+        context.bot.send_photo = AsyncMock()
+        with patch.object(handlers, "_linked_profile", return_value=PROFILE), \
+                patch.object(handlers, "_latest_post", return_value={**POST, "product_id": "prod-1"}), \
+                patch.object(handlers.tasks, "generate_post", side_effect=tasks.NoAlternativeProduct("only")), \
+                patch.object(handlers.db, "update") as update_row:
+            await handlers.cmd_new(update, context)
+
+        update_row.assert_not_called()
+        context.bot.send_photo.assert_not_awaited()
+        self.assertIn("Add another photo", update.effective_message.reply_text.call_args.args[0])
+
+
 class ChangeCommandTests(unittest.IsolatedAsyncioTestCase):
     async def test_change_regenerates_latest_post_with_natural_language_feedback(self) -> None:
         update, context = _update(), MagicMock()

@@ -10,12 +10,22 @@ Brand configuration on the web → scheduled/on-demand AI generation of product 
 .
 ├── backend/    FastAPI REST API + Telegram bot worker + APScheduler
 ├── frontend/   Next.js SPA (5-step onboarding, template studio, dashboard)
+├── render.yaml Render Blueprint (backend web service)
+├── .github/    keepalive workflow (keeps the free Render service awake)
+├── DEPLOY.md   Vercel + Render deployment guide
 ├── scripts/    Preview-generation utilities
 ├── previews/   Generated product preview images
 ├── assets/     Sample product assets
 ├── PRD.md      Product requirements
 └── BRIEF.md    Technical brief & reference specification
 ```
+
+## Deploy
+
+Frontend → Vercel (Root Directory `frontend`), backend → Render free web
+service via [`render.yaml`](render.yaml), plus a 10-minute heartbeat so the
+free instance doesn't spin down. Full steps and env-var list:
+[`DEPLOY.md`](DEPLOY.md).
 
 ## Quickstart
 

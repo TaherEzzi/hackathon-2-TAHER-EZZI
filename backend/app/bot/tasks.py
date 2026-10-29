@@ -30,6 +30,12 @@ class SlotNotViable(Exception):
     slot failed with a log instead of crashing the tick."""
 
 
+class NoAlternativeProduct(SlotNotViable):
+    """A different product was requested but the locker has only the one
+    already on the draft; callers say "add another product" instead of the
+    generic missing-assets message."""
+
+
 @dataclass
 class PostPayload:
     post_id: str
@@ -67,8 +73,17 @@ def pick_preset(profile: Dict[str, Any], explicit_preset_id: Optional[int]) -> O
     return None
 
 
-def pick_product(profile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def pick_product(
+    profile: Dict[str, Any], exclude_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Random product from the locker, optionally skipping one id.
+
+    `exclude_id` powers /new: the caller wants a *different* product than the
+    one already rendered in the current draft.
+    """
     rows = db.select("products", {"profile_id": profile["id"]}, limit=100)
+    if exclude_id:
+        rows = [r for r in rows if str(r.get("id")) != str(exclude_id)]
     return random.choice(rows) if rows else None
 
 
@@ -105,6 +120,7 @@ def generate_post(
     base_post: Optional[Dict[str, Any]] = None,
     slot_date: Optional[date] = None,
     slot_index: Optional[int] = None,
+    exclude_product_id: Optional[str] = None,
 ) -> PostPayload:
     """Full pipeline in one sync call:
 
@@ -122,7 +138,14 @@ def generate_post(
         rows = db.select("products", {"id": base_post["product_id"]}, limit=1)
         product = rows[0] if rows else pick_product(profile)
     else:
-        product = pick_product(profile)
+        product = pick_product(profile, exclude_id=exclude_product_id)
+    if product is None and exclude_product_id and revision_feedback is None:
+        # Distinguish "another product requested but the locker has only the
+        # current one" from "locker is empty".
+        if db.select("products", {"profile_id": profile["id"]}, limit=1):
+            raise NoAlternativeProduct(
+                f"profile {profile['id']}: only the product on the draft exists"
+            )
     if revision_feedback is None and (preset is None or product is None):
         # Fresh slot without inputs is unrecoverable; revisions must have a base.
         raise SlotNotViable(

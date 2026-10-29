@@ -101,5 +101,32 @@ class GeneratePostFallbackTests(unittest.TestCase):
         select.assert_called_once_with("products", {"id": "p1"}, limit=1)
 
 
+class GenerateNewProductTests(unittest.TestCase):
+    """`/new` renders a fresh post from a product other than the draft's."""
+
+    def test_new_excludes_the_product_on_the_current_draft(self) -> None:
+        with patch.object(tasks, "pick_preset", return_value=PRESET), \
+                patch.object(tasks, "pick_product", return_value=PRODUCT) as pick_product, \
+                patch.object(tasks, "_fetch_product_image", return_value=b"jpeg"), \
+                patch.object(tasks.text, "generate_caption", return_value=("cap", ["#tag"])), \
+                patch.object(tasks.storage, "upload_generated_post", return_value="u1/new.jpg"), \
+                patch.object(tasks.storage, "public_url", return_value="https://cdn/new.jpg"), \
+                patch.object(tasks.db, "insert", return_value={"id": "post-2"}), \
+                patch.object(
+                    tasks.images, "generate_image_edit",
+                    return_value=ImageResult(b"img", "cloudflare-flux-2-klein-4b"),
+                ):
+            tasks.generate_post(PROFILE, preset_id=40, exclude_product_id="p0")
+
+        pick_product.assert_called_once_with(PROFILE, exclude_id="p0")
+
+    def test_new_reports_when_only_the_excluded_product_exists(self) -> None:
+        with patch.object(tasks, "pick_preset", return_value=PRESET), \
+                patch.object(tasks, "pick_product", return_value=None), \
+                patch.object(tasks.db, "select", return_value=[PRODUCT]):
+            with self.assertRaises(tasks.NoAlternativeProduct):
+                tasks.generate_post(PROFILE, exclude_product_id="p0")
+
+
 if __name__ == "__main__":
     unittest.main()

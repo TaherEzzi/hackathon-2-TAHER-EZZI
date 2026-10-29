@@ -4,12 +4,14 @@ Command surface:
   /start [code]      — start chat; `code` from the ?start=<pairing_code> deep link pairs the chat
   /link <code>       — explicit pairing (same flow as /start <code>)
   /generate [preset#]— on-demand demo generation for a random/specific preset
+  /new               — generate a fresh post from a DIFFERENT product than the
+                       current draft (same theme, new product photo)
   /change <feedback> — regenerate the latest post with natural-language feedback
   /post              — publish the latest generated/edited image to Instagram
   /status            — tier, schedule, last 5 posts
   /skip              — skip today's remaining slot
 Inline callbacks per post message:
-  approve:{post_id} | skip:{post_id} | edit:{post_id}
+  approve:{post_id} | edit:{post_id} | new:{post_id} | skip:{post_id}
 
 TELEGRAM_BOT_TOKEN is pending at scaffold time — `start_polling` raises a
 clean ConfigurationError that app.main catches and logs without crashing
@@ -40,11 +42,16 @@ log = logging.getLogger(__name__)
 
 def keyboard_for(post_id: str) -> InlineKeyboardMarkup:
     pid = str(post_id)
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Approve & Post", callback_data=f"approve:{pid}"),
-        InlineKeyboardButton("✏️ Request Edit", callback_data=f"edit:{pid}"),
-        InlineKeyboardButton("⏭️ Skip Today", callback_data=f"skip:{pid}"),
-    ]])
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Approve & Post", callback_data=f"approve:{pid}"),
+            InlineKeyboardButton("✏️ Request Edit", callback_data=f"edit:{pid}"),
+        ],
+        [
+            InlineKeyboardButton("🔄 Generate New", callback_data=f"new:{pid}"),
+            InlineKeyboardButton("⏭️ Skip Today", callback_data=f"skip:{pid}"),
+        ],
+    ])
 
 
 # ── Profile resolution ───────────────────────────────────────────────────
@@ -77,6 +84,13 @@ def _latest_actionable_post(profile_id: str) -> Optional[Dict[str, Any]]:
         if post.get("status") == "awaiting_review" and post.get("image_path"):
             return post
     return None
+
+
+def _latest_post(profile_id: str) -> Optional[Dict[str, Any]]:
+    """Newest post whatever its status — /new excludes its product, so a
+    just-published post still counts as the "current one"."""
+    posts = db.recent_posts(profile_id, limit=1)
+    return posts[0] if posts else None
 
 
 def _publish_post_row(post: Dict[str, Any]) -> Tuple[str, str]:
@@ -120,16 +134,62 @@ async def _revise_post(
         await update.effective_message.reply_text(f"💥 Revision failed: {exc}")
         return
     kb = keyboard_for(payload.post_id)
-    if used + 1 >= budget:  # last free edit: keep Approval/Skip only
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Approve & Post", callback_data=f"approve:{post['id']}"),
-            InlineKeyboardButton("⏭️ Skip Today", callback_data=f"skip:{post['id']}"),
-        ]])
+    if used + 1 >= budget:  # last free edit: keep Approval/Skip/New only
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ Approve & Post", callback_data=f"approve:{post['id']}"),
+                InlineKeyboardButton("🔄 Generate New", callback_data=f"new:{post['id']}"),
+            ],
+            [InlineKeyboardButton("⏭️ Skip Today", callback_data=f"skip:{post['id']}")],
+        ])
     await context.bot.send_photo(
         chat_id=update.effective_chat.id, photo=payload.image_url,
         caption=f"✏️ Revised (edit {used + 1}/{budget}):\n\n{payload.chat_text}"[:1024],
         reply_markup=kb,
     )
+
+
+async def _generate_new(
+    update: Update, context: ContextTypes.DEFAULT_TYPE,
+    base_post: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Render a fresh post from a product other than `base_post`'s, keeping
+    the draft's theme so the comparison is product-for-product. The old
+    draft is retired once the new one exists. Returns True on success."""
+    profile = _linked_profile(update.effective_chat.id)
+    if not profile:
+        await update.effective_message.reply_text("Link your brand first: /link <pairing_code>")
+        return False
+    if base_post is None:
+        base_post = _latest_post(profile["id"])
+    exclude_id = (base_post or {}).get("product_id")
+    preset_id = (base_post or {}).get("preset_id")
+    await update.effective_message.reply_text("🔄 Swapping in a different product…")
+    try:
+        payload = await asyncio.to_thread(
+            tasks.generate_post, profile,
+            preset_id=preset_id, exclude_product_id=exclude_id,
+        )
+    except tasks.NoAlternativeProduct:
+        await update.effective_message.reply_text(
+            "⚠️ Your locker holds only the product already on this draft. "
+            "Add another photo in the Asset Locker, then tap 🔄 Generate New again."
+        )
+        return False
+    except SlotNotViable:
+        await update.effective_message.reply_text(
+            "⚠️ Add at least one product and one theme preset in the web app first."
+        )
+        return False
+    except Exception as exc:  # noqa: BLE001 — providers flake; user needs a short readable reason
+        log.exception("generate-new failed")
+        await update.effective_message.reply_text(f"💥 Something broke while generating: {exc}")
+        return False
+    if base_post and base_post.get("status") == "awaiting_review":
+        # One pending draft at a time: /post and /change always target the newest.
+        db.update("post", {"id": base_post["id"]}, {"status": "skipped"})
+    await send_post(context.bot, update.effective_chat.id, payload)
+    return True
 
 
 # ── Commands ─────────────────────────────────────────────────────────────
@@ -211,6 +271,11 @@ async def cmd_generate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.effective_message.reply_text(f"💥 Something broke while generating: {exc}")
         return
     await send_post(context.bot, chat_id, payload)
+
+
+async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/new — fresh post from a different product than the current draft."""
+    await _generate_new(update, context)
 
 
 async def cmd_change(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -353,6 +418,27 @@ async def _cb_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await query.edit_message_caption(caption="⏭️ Skipped — I'll prepare tomorrow's post.")
 
 
+async def _cb_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🔄 Generate New — same theme, product swapped for another in the locker."""
+    query = update.callback_query
+    post_id = query.data.split(":", 1)[1]
+    post = _post_lookup(post_id)
+    if not post:
+        await query.answer("Draft not found.", show_alert=True)
+        return
+    await query.answer("Switching product…")
+    replaced_draft = post.get("status") == "awaiting_review"
+    if not await _generate_new(update, context, base_post=post):
+        return
+    if replaced_draft:
+        try:
+            await query.edit_message_caption(
+                caption="🔄 Draft replaced — the new product is below."
+            )
+        except Exception:  # noqa: BLE001 — caption edit is cosmetic
+            pass
+
+
 async def _cb_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/edit flow — the NEXT plain text message in this chat becomes the
     revision feedback. Stored per-chat so it survives until the reply arrives."""
@@ -385,9 +471,11 @@ def register(application: Application) -> None:
     application.add_handler(CallbackQueryHandler(_cb_approve, pattern=r"^approve:"))
     application.add_handler(CallbackQueryHandler(_cb_skip, pattern=r"^skip:"))
     application.add_handler(CallbackQueryHandler(_cb_edit, pattern=r"^edit:"))
+    application.add_handler(CallbackQueryHandler(_cb_new, pattern=r"^new:"))
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("link", cmd_link))
     application.add_handler(CommandHandler("generate", cmd_generate))
+    application.add_handler(CommandHandler("new", cmd_new))
     application.add_handler(CommandHandler("change", cmd_change))
     application.add_handler(CommandHandler("post", cmd_post))
     application.add_handler(CommandHandler("status", cmd_status))
@@ -415,6 +503,7 @@ async def start_polling(application: Application) -> None:
     try:
         await application.bot.set_my_commands([
             BotCommand("generate", "Generate a post now"),
+            BotCommand("new", "Generate from a different product"),
             BotCommand("change", "Revise the latest draft (say what to change)"),
             BotCommand("post", "Publish the latest draft to Instagram"),
             BotCommand("status", "Show your schedule and latest posts"),

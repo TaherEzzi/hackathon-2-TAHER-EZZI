@@ -1,0 +1,59 @@
+# Render Blueprint — BreezePost backend (FastAPI + Telegram bot + scheduler).
+#
+# Why a web service and not a worker/cron: on the free plan only *web*
+# services exist, so the bot and APScheduler run inside the uvicorn process
+# (they already do, see app/main.py lifespan).
+#
+# Secrets are `sync: false`: Render prompts for them in the dashboard and
+# never stores them in git. Non-secret runtime settings are pinned here.
+services:
+  - type: web
+    name: breezepost-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    region: singapore
+    branch: main
+    autoDeploy: true
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      # ── Secrets: set these in the Render dashboard ──────────────────
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: IG_ACCESS_TOKEN
+        sync: false
+      - key: IG_USER_ID
+        sync: false
+      # ── Pinned runtime settings ─────────────────────────────────────
+      - key: TELEGRAM_POLLING
+        value: "true"
+      - key: TG_BOT_USERNAME
+        value: BreezePostBot
+      - key: PUBLISH_MODE
+        value: real
+      - key: IG_API_VERSION
+        value: v24.0
+      - key: POST_IMAGE_SIZE
+        value: "512"
+      - key: DEFAULT_TIMEZONE
+        value: Asia/Kolkata
+      - key: CLOUDFLARE_EDIT_MODEL
+        value: "@cf/black-forest-labs/flux-2-klein-4b"
+      - key: CLOUDFLARE_EDIT_MODEL_FALLBACK
+        value: "@cf/black-forest-labs/flux-2-klein-4b"
+      - key: CLOUDFLARE_TEXT_MODEL
+        value: "@cf/meta/llama-3.1-8b-instruct-fp8"
+      - key: CLOUDFLARE_TEXT_FALLBACKS
+        value: "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
