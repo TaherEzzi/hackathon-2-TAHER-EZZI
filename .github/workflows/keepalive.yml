@@ -27,8 +27,10 @@ jobs:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
         run: |
           if [ -z "$BACKEND_URL" ]; then
-            echo "::error::Add the Render URL as the BACKEND_URL repository secret."
-            exit 1
+            # Until the Render service exists there is nothing to ping; a hard
+            # failure here would spam 144 failed runs a day.
+            echo "::warning::BACKEND_URL secret is not set yet — see DEPLOY.md."
+            exit 0
           fi
           # /health also exercises Supabase, so this doubles as a dependency probe.
           curl --silent --show-error --fail --max-time 55 --retry 2 "$BACKEND_URL/health"
